@@ -14,9 +14,24 @@ pub fn open_file_with_fallback<P: AsRef<Path>>(
         Err(e) => e,
     };
 
-    if let Some(filename) = path.file_name() {
-        for dir in extra_dirs {
-            let p: PathBuf = [dir.as_ref(), Path::new(filename)].iter().collect();
+    let filename = path.file_name();
+    let is_absolute = path.is_absolute();
+
+    for dir in extra_dirs {
+        // 1. Try joining the filename (legacy behavior)
+        if let Some(filename) = filename {
+            let p = dir.as_ref().join(filename);
+            if let Ok(file) = std::fs::File::open(&p) {
+                return Ok((file, p));
+            }
+        }
+
+        // 2. If it's an absolute path, try joining the full path to the directory.
+        // This allows /proc/<pid>/root to work correctly by providing the full path within the root.
+        if is_absolute {
+            let mut components = path.components();
+            components.next(); // Skip the root component
+            let p = dir.as_ref().join(components.as_path());
             if let Ok(file) = std::fs::File::open(&p) {
                 return Ok((file, p));
             }
