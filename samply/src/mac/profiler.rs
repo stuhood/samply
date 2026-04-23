@@ -14,13 +14,14 @@ use super::process_launcher::{
 use super::sampler::{ProcessSpecificPath, Sampler, TaskInit, TaskInitOrShutdown};
 use super::time::get_monotonic_timestamp;
 use crate::shared::prop_types::{
-    ProcessLaunchProps, ProfileCreationProps, RecordingMode, RecordingProps,
+    ProcessLaunchProps, ProfileCreationProps, RecordingMode, RecordingProps, SymbolProps,
 };
 
 pub fn run(
     recording_mode: RecordingMode,
     recording_props: RecordingProps,
     mut profile_creation_props: ProfileCreationProps,
+    _symbol_props: SymbolProps,
 ) -> Result<(Profile, ExitStatus), MachError> {
     let mut task_accepter = TaskAccepter::new()?;
 

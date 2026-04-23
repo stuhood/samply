@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::os::unix::process::ExitStatusExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
@@ -24,7 +24,7 @@ use crate::linux_shared::{
 };
 use crate::shared::ctrl_c::CtrlC;
 use crate::shared::prop_types::{
-    ProcessLaunchProps, ProfileCreationProps, RecordingMode, RecordingProps,
+    ProcessLaunchProps, ProfileCreationProps, RecordingMode, RecordingProps, SymbolProps,
 };
 
 #[cfg(target_arch = "x86_64")]
@@ -37,6 +37,7 @@ pub fn run(
     recording_mode: RecordingMode,
     recording_props: RecordingProps,
     profile_creation_props: ProfileCreationProps,
+    symbol_props: SymbolProps,
 ) -> Result<(Profile, ExitStatus), ()> {
     let process_launch_props = match recording_mode {
         RecordingMode::All => {
@@ -46,7 +47,8 @@ pub fn run(
             std::process::exit(1)
         }
         RecordingMode::Pid(pid) => {
-            let profile = start_profiling_pid(pid, recording_props, profile_creation_props);
+            let profile =
+                start_profiling_pid(pid, recording_props, profile_creation_props, symbol_props);
             return Ok((profile, ExitStatus::from_raw(0)));
         }
         RecordingMode::Launch(process_launch_props) => process_launch_props,
@@ -101,8 +103,9 @@ pub fn run(
         None => initial_exec_name,
     };
     let initial_exec_name_and_cmdline = (initial_exec_name, initial_cmdline);
+    let binary_lookup_dirs = symbol_props.symbol_dir.clone();
     let observer_thread = thread::spawn(move || {
-        let mut converter = make_converter(interval, profile_creation_props);
+        let mut converter = make_converter(interval, profile_creation_props, binary_lookup_dirs);
 
         // Wait for the initial pid to profile.
         let SamplerRequest::StartProfilingAnotherProcess(pid, attach_mode) =
@@ -243,6 +246,7 @@ fn start_profiling_pid(
     pid: u32,
     recording_props: RecordingProps,
     profile_creation_props: ProfileCreationProps,
+    symbol_props: SymbolProps,
 ) -> Profile {
     // When the first Ctrl+C is received, stop recording.
     let ctrl_c_receiver = CtrlC::observe_oneshot();
@@ -254,11 +258,13 @@ fn start_profiling_pid(
     let (profile_another_pid_reply_sender, profile_another_pid_reply_receiver) =
         crossbeam_channel::bounded(2);
 
+    let mut binary_lookup_dirs = symbol_props.symbol_dir.clone();
+    binary_lookup_dirs.push(Path::new(&format!("/proc/{pid}/root")).to_owned());
     let observer_thread = thread::spawn({
         move || {
             let interval = recording_props.interval;
             let time_limit = recording_props.time_limit;
-            let mut converter = make_converter(interval, profile_creation_props);
+            let mut converter = make_converter(interval, profile_creation_props, binary_lookup_dirs);
             let SamplerRequest::StartProfilingAnotherProcess(pid, attach_mode) =
                 profile_another_pid_request_receiver.recv().unwrap()
             else {
@@ -319,6 +325,7 @@ fn paranoia_level() -> Option<u32> {
 fn make_converter(
     interval: Duration,
     profile_creation_props: ProfileCreationProps,
+    binary_lookup_dirs: Vec<PathBuf>,
 ) -> Converter<framehop::UnwinderNative<MmapRangeOrVec, framehop::MayAllocateDuringUnwind>> {
     let interval_nanos = if interval.as_nanos() > 0 {
         interval.as_nanos() as u64
@@ -355,7 +362,7 @@ fn make_converter(
         first_sample_time,
         endian,
         framehop::CacheNative::new(),
-        Vec::new(),
+        binary_lookup_dirs,
         Vec::new(),
         interpretation,
         None,

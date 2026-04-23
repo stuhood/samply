@@ -124,8 +124,12 @@ fn do_record_action(record_args: cli::RecordArgs) {
     let profile_creation_props = record_args.profile_creation_props();
     let presymbolicate = profile_creation_props.presymbolicate;
 
-    let (mut profile, exit_status) =
-        match profiler::run(recording_mode, recording_props, profile_creation_props) {
+    let (mut profile, exit_status) = match profiler::run(
+        recording_mode,
+        recording_props,
+        profile_creation_props,
+        record_args.symbol_props(),
+    ) {
             Ok(exit_status) => exit_status,
             Err(err) => {
                 eprintln!("Encountered an error during profiling: {err:?}");

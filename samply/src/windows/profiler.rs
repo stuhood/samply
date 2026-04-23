@@ -7,7 +7,7 @@ use super::etw_gecko;
 use super::profile_context::ProfileContext;
 use crate::shared::ctrl_c::CtrlC;
 use crate::shared::included_processes::IncludedProcesses;
-use crate::shared::prop_types::{ProfileCreationProps, RecordingMode, RecordingProps};
+use crate::shared::prop_types::{ProfileCreationProps, RecordingMode, RecordingProps, SymbolProps};
 use crate::windows::elevated_helper::ElevatedHelperSession;
 
 // Hello intrepid explorer! You may be in this code because you'd like to extend something,
@@ -40,6 +40,7 @@ pub fn run(
     recording_mode: RecordingMode,
     recording_props: RecordingProps,
     profile_creation_props: ProfileCreationProps,
+    _symbol_props: SymbolProps,
 ) -> Result<(Profile, ExitStatus), i32> {
     let timebase = std::time::SystemTime::now();
     let timebase = ReferenceTimestamp::from_system_time(timebase);
